@@ -237,6 +237,8 @@ def creationQgisProcess(nom:str, helpstring:str, group:str, url:str, cheminFichi
             self.tr('{parameter.capitalize()} :'),
             {parameter}s,
             defaultValue = {listEnum[0]}
+        )
+        self.addParameter({parameter})
             """
             initParam += paramTxt
 
