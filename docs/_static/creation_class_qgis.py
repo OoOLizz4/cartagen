@@ -47,7 +47,7 @@ def transfoHtml(helpstring, doc_url):
 #Main Process
 def creationQgisProcess(nom:str, helpstring:str, group:str, url:str, cheminFichier:str):
     """
-    Fonction qui créer le texte pour la Classe qui fait tourner les algorithmes
+    Fonction qui permet de créer le texte pour la Classe qui fait tourner les algorithmes
     de CartAgen dans QGis
     """
 
@@ -64,45 +64,54 @@ def creationQgisProcess(nom:str, helpstring:str, group:str, url:str, cheminFichi
     nomEsp = "".join(nomEsp)
 
     #Nom de sortie
-    nomFin = listNom[0:midpoint] + ["ed "] + listNom[midpoint:]
-    nomFin = "".join(nomFin)
+    nomEspList = nomEsp.split(" ")
+    derniereLettre = nomEspList[0][-1]
+    if derniereLettre == 'y':
+        premMot = list(nomEspList[0]) 
+        premMot[-1] = "ied"
+    elif derniereLettre =='e':
+        premMot = [nomEspList[0]] + ["d"]
+    else :
+        premMot = [nomEspList[0]] + ["ed"]
+    premMot = ["".join(premMot)]
+    nomFin = premMot + nomEspList[1:]
+    nomFin = " ".join(nomFin)
 
     #Nom avec des tirets
-    listNom = re.split('([A-Z])', nom)
-    midpoint = len(listNom)//2+1
-    nomTiret = listNom[0:midpoint] + ["_"] + listNom[midpoint:]
-    nomTiret = "".join(nomTiret)
-    nomTiret = nomTiret.lower()
+    nomTiret = nomEsp.lower()
+    nomTiret = nomTiret.split()
+    nomTiret = "_".join(nomTiret)
 
     #Création du fichier
     chemin = f"{cheminFichier}{nomTiret}.py"
     fichier = open(chemin, "x")    
 
     #Nettoyage de l'helpstring
-    tableauHelp = helpstring.splitlines()
-    listHelp = []
-    for ligne in tableauHelp:
+    helpstringList = helpstring.splitlines()
+    helpPropre = []
+    for ligne in helpstringList:
         ligne = ligne.strip()
         if ligne != "":
-            listHelp.append(ligne)
+            helpPropre.append(ligne)
 
     #Récupération des paramètres et de leur type
     parameters = []
     nbParam = 0
     paramType = []
     listDefaultValue = []
-    for i, ligne in enumerate(listHelp):
+    listEnum = []
+    for i, ligne in enumerate(helpPropre):
         if re.findall("[–]", ligne):
             nbParam = nbParam + 1
-            if nbParam != 1 and i!=len(listHelp):
+            if nbParam != 1 and i!=len(helpPropre):
                 name, description = ligne.split("–", 1)
 
                 #Isolation de la valeur par défaut
                 try:
-                    resid, defaultValue = description.split("Default")
+                    residus, defaultValue = description.split("Default")
                     defaultValue = ''.join(defaultValue)
                     defaultValue = defaultValue.strip()
-                    resid, defaultValue = defaultValue.split(" ", 1)
+                    residus, defaultValue = defaultValue.split(" ", 1)
                     defaultValue = re.sub(r'[.]', '', defaultValue)
                     listDefaultValue.append(defaultValue)
                 except:
@@ -128,6 +137,11 @@ def creationQgisProcess(nom:str, helpstring:str, group:str, url:str, cheminFichi
                 type = type[:-1]
                 type = type.split()
                 nomTypeGeom = (type, description)
+
+        #Pour récupérer les options s'il y a un Enum
+        elif re.findall("[’]", ligne):
+            residus1, option, residus2 = ligne.split("’", 2)
+            listEnum.append(option)
 
     #Ecriture des types de paramètres du Sink
     typeGeom = nomTypeGeom[0]
@@ -217,14 +231,12 @@ def creationQgisProcess(nom:str, helpstring:str, group:str, url:str, cheminFichi
 
         elif type == "str":
             paramTxt = f"""
-        {parameter}s = []
+        {parameter}s = {listEnum}
         {parameter} = QgsProcessingParameterEnum(
             self.{parameter.upper()},
-            self.tr('{parameter.capitalize()} ?'),
-            {parameter}s
-            defaultValue=30.0,
-        )
-        self.addParameter({parameter})
+            self.tr('{parameter.capitalize()} :'),
+            {parameter}s,
+            defaultValue = {listEnum[0]}
             """
             initParam += paramTxt
 
@@ -262,6 +274,7 @@ def creationQgisProcess(nom:str, helpstring:str, group:str, url:str, cheminFichi
 
         elif type == "str":
             paramTxt = f"""
+        {parameter}s = {listEnum}
         {parameter} = self.parameterAsEnum(parameters, self.{parameter.upper()}, context)
             """
             processParam += paramTxt
@@ -427,7 +440,7 @@ class {nom} (QgsProcessingAlgorithm):
             }
         '''
     with open(chemin, 'w') as f:
-        f.write(modele)    
+        f.write(modele)      
 
     return modele
 
