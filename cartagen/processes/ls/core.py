@@ -82,7 +82,7 @@ class LeastSquaresMethod:
 
         Parameters
         ----------
-        object : GeoDataFrame
+        objects : GeoDataFrame
             One or multiple GeoDataFrame of geographic objects, can be Point, LineString or Polygon (if MultiGeometry are provided, they will be exploded).
             If multiple objects are provided, they must be the same geometry type because the same constraints will be applied.
         weights : int, optional

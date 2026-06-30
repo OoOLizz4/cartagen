@@ -10,14 +10,13 @@ def transfoHtml(helpstring, doc_url):
     nbParam = 0
 
 
-    for line in lines:
+    for i,line in enumerate(lines):
 
         if re.findall("[–]", line):
             nbParam +=1
-            if nbParam != 1:
-                name, descrip = line.split("–", 1)
-                name, type = name.split("(", 1)
-                # print(f"nom : {name} et description {descrip}")
+            if nbParam != 1 and i!=len(lines)-1:
+                nameT, descrip = line.split("–", 1)
+                name, type = nameT.split("(", 1)
                 parameters.append((name, descrip))
         else :
             description.append(line)
@@ -47,7 +46,7 @@ def transfoHtml(helpstring, doc_url):
 #Main Process
 def creationQgisProcess(nom:str, helpstring:str, group:str, url:str, cheminFichier:str):
     """
-    Fonction qui permet de créer le texte pour la Classe qui fait tourner les algorithmes
+    Fonction qui créer le texte pour la Classe qui fait tourner les algorithmes
     de CartAgen dans QGis
     """
 
@@ -83,7 +82,7 @@ def creationQgisProcess(nom:str, helpstring:str, group:str, url:str, cheminFichi
     nomTiret = "_".join(nomTiret)
 
     #Création du fichier
-    chemin = f"{cheminFichier}{nomTiret}.py"
+    chemin = f"{cheminFichier}\\{nomTiret}.py"
     fichier = open(chemin, "x")    
 
     #Nettoyage de l'helpstring
@@ -103,8 +102,8 @@ def creationQgisProcess(nom:str, helpstring:str, group:str, url:str, cheminFichi
     for i, ligne in enumerate(helpPropre):
         if re.findall("[–]", ligne):
             nbParam = nbParam + 1
-            if nbParam != 1 and i!=len(helpPropre):
-                name, description = ligne.split("–", 1)
+            if nbParam != 1 and i!=len(helpPropre)-1:
+                nameT, description = ligne.split("–", 1)
 
                 #Isolation de la valeur par défaut
                 try:
@@ -118,7 +117,7 @@ def creationQgisProcess(nom:str, helpstring:str, group:str, url:str, cheminFichi
                     listDefaultValue.append(1)
 
                 #Isolation nom paramètre
-                name, type = name.split("(", 1)
+                name, type = nameT.split("(", 1)
                 parameters.append(name.strip())
 
                 #Isolation du type
@@ -129,13 +128,14 @@ def creationQgisProcess(nom:str, helpstring:str, group:str, url:str, cheminFichi
                     type, residus = type.split(")",1)
                     paramType.append((name.strip(), type.strip()))
 
-            else :
+            elif nbParam == 1:
                 #Isolation du nom de la géométrie d'entrée
-                name, description = ligne.split("–", 1)
-                name, type = name.split("(", 1)
+                nameT, description = ligne.split("–", 1)
+                name, type = nameT.split("(", 1)
                 type = type.strip()
                 type = type[:-1]
                 type = type.split()
+                description = re.sub('[.]', '', description)
                 nomTypeGeom = (type, description)
 
         #Pour récupérer les options s'il y a un Enum
@@ -230,16 +230,30 @@ def creationQgisProcess(nom:str, helpstring:str, group:str, url:str, cheminFichi
             initParam += paramTxt
 
         elif type == "str":
-            paramTxt = f"""
+            if listEnum:
+                paramTxt = f"""
         {parameter}s = {listEnum}
         {parameter} = QgsProcessingParameterEnum(
-            self.{parameter.upper()},
-            self.tr('{parameter.capitalize()} :'),
-            {parameter}s,
-            defaultValue = {listEnum[0]}
-        )
-        self.addParameter({parameter})
-            """
+                self.{parameter.upper()},
+                self.tr('{parameter.capitalize()} :'),
+                {parameter}s,
+                defaultValue = "{listEnum[0]}"
+            )
+            self.addParameter({parameter})
+                """
+            else:
+                paramTxt = f"""
+        {parameter} = QgsProcessingParameterField(
+                self.{parameter.upper()},
+                self.tr('{parameter.capitalize()} :'),
+                parentLayerParameterName='INPUT', 
+                type=QgsProcessingParameterField.Any,
+                allowMultiple=True,
+                optional=True                
+            )
+            self.addParameter({parameter})
+                """
+            
             initParam += paramTxt
 
         else :
@@ -257,33 +271,25 @@ def creationQgisProcess(nom:str, helpstring:str, group:str, url:str, cheminFichi
     processParam=""
     for parameter, type in paramType :
         if type == "float":
-            paramTxt = f"""
-        {parameter} = self.parameterAsDouble(parameters, self.{parameter.upper()}, context)
-            """
+            paramTxt = f"""{parameter} = self.parameterAsDouble(parameters, self.{parameter.upper()}, context)"""
             processParam += paramTxt
 
         elif type == "bool":
-            paramTxt = f"""
-        {parameter} = self.parameterAsBoolean(parameters, self.{parameter.upper()}, context)
-            """
+            paramTxt = f"""{parameter} = self.parameterAsBoolean(parameters, self.{parameter.upper()}, context)"""
             processParam += paramTxt
         
         elif type == "int":
-            paramTxt = f"""
-        {parameter} = self.parameterAsInt(parameters, self.{parameter.upper()}, context)
-            """
+            paramTxt = f"""{parameter} = self.parameterAsInt(parameters, self.{parameter.upper()}, context)"""
             processParam += paramTxt
 
         elif type == "str":
             paramTxt = f"""
         {parameter}s = {listEnum}
-        {parameter} = self.parameterAsEnum(parameters, self.{parameter.upper()}, context)
-            """
+        {parameter} = self.parameterAsEnum(parameters, self.{parameter.upper()}, context)"""
             processParam += paramTxt
 
         else :
-            paramTxt = f"""
-        {parameter} = self.parameterAsSource(parameters, self.{parameter.upper()}, context)"""
+            paramTxt = f"""{parameter} = self.parameterAsSource(parameters, self.{parameter.upper()}, context)"""
             processParam += paramTxt
 
     modele = f'''
@@ -297,6 +303,7 @@ from qgis.core import (
     QgsProcessingParameterBoolean,
     QgsProcessingParameterNumber,
     QgsProcessingParameterDistance,
+    QgsProcessingParameterField
 )    
 
 class {nom} (QgsProcessingAlgorithm):
@@ -308,8 +315,8 @@ class {nom} (QgsProcessingAlgorithm):
     # used when calling the algorithm from another algorithm, or when
     # calling from the QGIS console.
 
-    OUTPUT = 'OUTPUT'
-    INPUT = 'INPUT'
+    OUTPUT='OUTPUT'
+    INPUT='INPUT'
 {paramUp}
     def name(self):
         """
@@ -411,7 +418,7 @@ class {nom} (QgsProcessingAlgorithm):
         source = self.parameterAsSource(parameters, self.INPUT, context)
         gdf = gpd.GeoDataFrame.from_features(source.getFeatures())
         
-        # retrieve the other parameters values
+        # Retrieve the other parameters values
 {processParam}
         
         # Compute the number of steps to display within the progress bar and
@@ -442,7 +449,7 @@ class {nom} (QgsProcessingAlgorithm):
             }
         '''
     with open(chemin, 'w') as f:
-        f.write(modele)      
+        f.write(modele)    
 
     return modele
 

@@ -1,5 +1,6 @@
 from cartagen.utils.geometry.topo_map import TopoMap
 from cartagen.utils.geometry.polygon import surfacic_distance
+from shapely import MultiPolygon
 
 def generalize_boundaries(polygons, algorithm, *args, **kwargs):
     """

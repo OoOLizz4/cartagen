@@ -215,7 +215,7 @@ Finally, we can launch the generalisation that will return a tuple with as many 
 
 .. code-block:: Python
 
-    buildings, roads, rivers = ls.generalise()
+    buildings, roads, rivers = ls.generalize()
 
 .. plot:: code/manual/process_ls_original.py
     
