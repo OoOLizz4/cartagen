@@ -16,7 +16,9 @@ def transfoHtml(helpstring, doc_url):
             nbParam +=1
             if nbParam != 1 and i!=len(lines)-1:
                 nameT, descrip = line.split("–", 1)
+                print(nameT)
                 name, type = nameT.split("(", 1)
+                name = name.replace("_", " ")
                 parameters.append((name, descrip))
         else :
             description.append(line)
@@ -28,23 +30,23 @@ def transfoHtml(helpstring, doc_url):
     html = " ".join(description)
 
     if parameters:
-        html += "\n         <h3> Parameters: </h3>\n        <ul>\n"
+        html += "\n        <h3> Parameters: </h3>\n        <ul>\n"
 
         for name, descrip in parameters:
-            html += f'          <li> - <em>{name.capitalize()}</em> : {descrip} </li>\n'
+            html += f'              <li> - <em>{name.capitalize()}</em> : {descrip} </li>\n'
 
         html += "        </ul>"
 
     if doc_url:
         html += (
             f"""
-            For more see <a href="{doc_url}">help online</a>.
+        For more see <a href="{doc_url}">help online</a>.
             """)
     
     return(html)
 
 #Main Process
-def creationQgisProcess(nom:str, helpstring:str, group:str, url:str, cheminFichier:str):
+def creationQgisProcess(nom:str, helpstring:str, group:str, url:str, cheminFichier:str, typeTraitement:str):
     """
     Fonction qui créer le texte pour la Classe qui fait tourner les algorithmes
     de CartAgen dans QGis
@@ -118,6 +120,7 @@ def creationQgisProcess(nom:str, helpstring:str, group:str, url:str, cheminFichi
 
                 #Isolation nom paramètre
                 name, type = nameT.split("(", 1)
+                name = name.replace("_", " ")
                 parameters.append(name.strip())
 
                 #Isolation du type
@@ -135,7 +138,7 @@ def creationQgisProcess(nom:str, helpstring:str, group:str, url:str, cheminFichi
                 type = type.strip()
                 type = type[:-1]
                 type = type.split()
-                description = re.sub('[.]', '', description)
+                description = re.sub(r'[.]', '', description)
                 nomTypeGeom = (type, description)
 
         #Pour récupérer les options s'il y a un Enum
@@ -229,7 +232,7 @@ def creationQgisProcess(nom:str, helpstring:str, group:str, url:str, cheminFichi
             """
             initParam += paramTxt
 
-        elif type == "str":
+        elif "str" in type:
             if listEnum:
                 paramTxt = f"""
         {parameter}s = {listEnum}
@@ -271,15 +274,18 @@ def creationQgisProcess(nom:str, helpstring:str, group:str, url:str, cheminFichi
     processParam=""
     for parameter, type in paramType :
         if type == "float":
-            paramTxt = f"""{parameter} = self.parameterAsDouble(parameters, self.{parameter.upper()}, context)"""
+            paramTxt = f"""
+        {parameter} = self.parameterAsDouble(parameters, self.{parameter.upper()}, context)"""
             processParam += paramTxt
 
         elif type == "bool":
-            paramTxt = f"""{parameter} = self.parameterAsBoolean(parameters, self.{parameter.upper()}, context)"""
+            paramTxt = f"""
+        {parameter} = self.parameterAsBoolean(parameters, self.{parameter.upper()}, context)"""
             processParam += paramTxt
         
         elif type == "int":
-            paramTxt = f"""{parameter} = self.parameterAsInt(parameters, self.{parameter.upper()}, context)"""
+            paramTxt = f"""
+        {parameter} = self.parameterAsInt(parameters, self.{parameter.upper()}, context)"""
             processParam += paramTxt
 
         elif type == "str":
@@ -289,8 +295,35 @@ def creationQgisProcess(nom:str, helpstring:str, group:str, url:str, cheminFichi
             processParam += paramTxt
 
         else :
-            paramTxt = f"""{parameter} = self.parameterAsSource(parameters, self.{parameter.upper()}, context)"""
+            paramTxt = f"""
+        {parameter} = self.parameterAsSource(parameters, self.{parameter.upper()}, context)"""
             processParam += paramTxt
+
+    #Rédaction du traitement 
+    if typeTraitement == "GeoDataFrame":
+        tTraitement = f"""
+        # Actual algorithm
+        gdf_final = {nomTiret} (gdf, {paramAlgo})
+        res = gdf_final.to_dict('records')
+        res = list_to_qgis_feature(res)
+        """    
+    else:
+        tTraitement = f"""
+        # Compute the number of steps to display within the progress bar and
+        # get features from source
+        total = 100.0 / source.featureCount() if source.featureCount() else 0
+        features = source.getFeatures()    
+        # Actual algorithm
+        dp = gdf.copy()
+        for i in range(len(gdf)):
+            dp.loc[i,'geometry'] = {nomTiret} (list(gdf.geometry)[i], {paramAlgo})
+
+            # Update the progress bar
+            feedback.setProgress(int(i * total))
+
+        res = dp.to_dict('records')
+        res = list_to_qgis_feature_2(res,source.fields())
+        """
 
     modele = f'''
 from qgis.PyQt.QtCore import QCoreApplication
@@ -420,22 +453,7 @@ class {nom} (QgsProcessingAlgorithm):
         
         # Retrieve the other parameters values
 {processParam}
-        
-        # Compute the number of steps to display within the progress bar and
-        # get features from source
-        total = 100.0 / source.featureCount() if source.featureCount() else 0
-        features = source.getFeatures()
-
-        dp = gdf.copy()
-        for i in range(len(gdf)):
-            dp.loc[i,'geometry'] = {nomTiret} (list(gdf.geometry)[i], {paramAlgo})
-
-            # Update the progress bar
-            feedback.setProgress(int(i * total))
-
-        res = dp.to_dict('records')
-        res = list_to_qgis_feature_2(res,source.fields())
-
+{tTraitement}
         # Create the output sink    
         (sink, dest_id) = self.parameterAsSink(parameters, self.OUTPUT,
                 context, res[0].fields(), source.wkbType(), source.sourceCrs())
